@@ -89,7 +89,7 @@ Margins must be checked against real model pricing. The prototype's `$0.05 / ima
 
 | Phase | Goal | Exit gate |
 |---|---|---|
-| 0. Fix the prototype | Env bug fixed, key off the client, repo clean | Runs locally, no key in the bundle |
+| 0. Fix the prototype | Key off the client (done), repo clean | Runs locally, no key in the bundle |
 | 1. Validate | Landing page + waitlist + 10 seller trials | 100 signups or 10 active testers |
 | 2. Monetise | Supabase auth + Stripe + server proxy | First 3 paying customers |
 | 3. Redesign | New UI, onboarding, presets by marketplace | Activation rate tracked |
@@ -108,26 +108,16 @@ Run all commands from the **repository root** (the folder that contains `package
 ```bash
 # in: <repo root>/
 npm install
-cp .env.example .env.local     # then put your key in .env.local
+cp .env.example .env.local
+# edit <repo root>/.env.local and set GEMINI_API_KEY and APP_ACCESS_CODE (any secret string you choose)
 npm run dev
 ```
 
-**Known issue:** `vite.config.ts` currently does not inject the key, although `index.tsx` reads `process.env.GEMINI_API_KEY`. For local use only, replace the file `<repo root>/vite.config.ts` with:
+The browser never sees the Gemini key. The app calls `POST /api/generate`; the Vite dev server runs the same handler that Vercel runs in production (`server/generate.ts`). On the first generation the app asks for your `APP_ACCESS_CODE` and remembers it in localStorage.
 
-```ts
-import { defineConfig, loadEnv } from 'vite';
+## 6b. Deploy (Vercel)
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-  return {
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
-  };
-});
-```
-
-> **Warning:** this bundles your key into the client JavaScript. Use it on your own machine only. Never deploy this publicly. The fix is the server proxy in `docs/TECH_SPEC.md`.
+Set these in the Vercel project's Environment Variables (server-side, not `VITE_`-prefixed): `GEMINI_API_KEY`, `APP_ACCESS_CODE`, optionally `RATE_LIMIT_PER_MINUTE`. The `api/generate.ts` function deploys automatically. Once Supabase exists, set `SUPABASE_URL` and `SUPABASE_ANON_KEY` and the proxy switches to verifying user JWTs.
 
 ## 7. Repository map
 
@@ -148,7 +138,7 @@ docs/KNOWN_ISSUES.md   defects and launch blockers
 
 ## 8. Honest status
 
-- **Launch blocker:** the Gemini key would be exposed in the browser. No public deploy until the server proxy exists.
+- **Gemini key:** server-side proxy implemented (`server/generate.ts`); the key is no longer in the browser bundle. Interim protection is a shared access code plus a per-instance rate limit. Per-user quotas arrive with Supabase.
 - No auth, payments or persistence beyond localStorage.
 - Cost figures in the dashboard are hardcoded estimates.
 - Legal not done: German Impressum, privacy policy, terms (the founder is in Germany), and a clear stance on rights to uploaded designs and generated images.

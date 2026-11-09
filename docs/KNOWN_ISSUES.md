@@ -2,8 +2,9 @@
 
 | # | Severity | Issue | Fix |
 |---|---|---|---|
-| 1 | Blocker | Gemini API key is read in client code (`index.tsx`, `new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })`) and would be bundled for any visitor | Server-side proxy Edge Function |
-| 2 | High | `vite.config.ts` is `defineConfig({})`, so the key is never injected and generation fails locally | Use `loadEnv` + `define` for local only (see README) |
+| 1 | Resolved | Gemini key was read in client code | Server proxy `server/generate.ts` + `api/generate.ts`; key is server-only, verified absent from `dist/` |
+| 2 | Resolved | `vite.config.ts` never injected the key | Dev middleware serves `/api/generate` |
+| 2b | High | Interim auth is a single shared access code and an in-memory per-instance rate limit; it is not per-user and resets on cold starts | Replace with Supabase JWT + `consume_quota` (code path already present, enabled by `SUPABASE_URL` + `SUPABASE_ANON_KEY`) |
 | 3 | High | Cost metrics assume a hardcoded `$0.05` per image | Confirm real pricing, log real usage |
 | 4 | High | "Unlimited" Brand tier has unbounded cost | Fair-use cap |
 | 5 | Medium | Landing copy drafts included invented stats / testimonials | Replace with real data or remove |

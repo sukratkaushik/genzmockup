@@ -1,7 +1,7 @@
 # Architecture
 
 ## Today (prototype)
-Browser only: Vite + TypeScript app calls Gemini directly with an API key, stores everything in localStorage. Fine for a demo, **unsafe to deploy** because the key ships in the bundle.
+Vite + TypeScript app; image generation goes through `POST /api/generate` (`server/generate.ts`, deployed as a Vercel Function). The proxy holds the Gemini key, fixes the model, whitelists request shape and size, rate-limits, and authenticates by shared access code or Supabase JWT. Everything else (gallery, presets) is still localStorage / IndexedDB.
 
 ## Target
 ```mermaid

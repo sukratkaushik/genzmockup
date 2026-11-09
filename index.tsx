@@ -7,7 +7,6 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import { GoogleGenAI, Modality, GenerateContentResponse, Type } from '@google/genai';
 import JSZip from 'jszip';
 
 // ========================================
@@ -1163,7 +1162,32 @@ let designFile: { inlineData: { mimeType: string; data: string; } } | null = nul
 let customBackgroundFile: any = null;
 let generatedImageUrls: { url: string, name: string, product: string, color: string }[] = [];
 let galleryImages: GalleryImage[] = [];
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ACCESS_CODE_KEY = 'genz_access_code';
+function readAccessCode(): string { try { return localStorage.getItem(ACCESS_CODE_KEY) ?? ''; } catch { return ''; } }
+function saveAccessCode(v: string) { try { localStorage.setItem(ACCESS_CODE_KEY, v); } catch { /* ignore */ } }
+
+// All model calls go through our server (/api/generate). No API key exists in the browser.
+async function generateImageViaServer(parts: any[]): Promise<{ mimeType: string; data: string } | null> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-access-code': readAccessCode() },
+            body: JSON.stringify({ parts }),
+        });
+        if (res.status === 401 && attempt === 0) {
+            const code = window.prompt('Enter your access code to generate mockups:');
+            if (!code) throw new Error('Access code required');
+            saveAccessCode(code.trim());
+            continue;
+        }
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: res.statusText }));
+            throw new Error(err.error || `Generation failed (${res.status})`);
+        }
+        return await res.json();
+    }
+    return null;
+}
 let currentModalIndex = -1;
 let isGenerating = false;
 let selectedImageUrls: string[] = [];
@@ -1387,10 +1411,11 @@ function preprocessImageForAI(file: File): Promise<{ inlineData: { mimeType: str
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d')!;
-                canvas.width = img.width; canvas.height = img.height;
+                const scale = Math.min(1, 2048 / Math.max(img.width, img.height)); // keep request under server body limit
+                canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
                 ctx.fillStyle = '#E0E0E0'; ctx.fillRect(0,0,canvas.width,canvas.height);
-                ctx.drawImage(img,0,0);
-                resolve(dataUrlToGenerativePart(canvas.toDataURL('image/jpeg',0.95))!);
+                ctx.drawImage(img,0,0,canvas.width,canvas.height);
+                resolve(dataUrlToGenerativePart(canvas.toDataURL('image/jpeg',0.9))!);
             };
             img.src = e.target!.result as string;
         };
@@ -1446,14 +1471,9 @@ async function generateImage(task: GenerationTask, index: number, totalTasks: nu
     const parts: any[] = [designFile!, { text: prompt }];
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: { parts },
-            config: { responseModalities: [Modality.IMAGE] }
-        });
-        const imgPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        const imgPart = await generateImageViaServer(parts);
         if (imgPart) {
-            const url = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
+            const url = `data:${imgPart.mimeType};base64,${imgPart.data}`;
             const name = `mockup_${Date.now()}.png`;
             trackGeneration(currentState.quality, true, Date.now() - startTime);
             
